@@ -55,7 +55,7 @@ function App() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://localhost:4000/best-quote', formData);
+      const response = await axios.post('https://meta-aggregator-be.onrender.com/best-quote', formData);
       setQuote(response.data);
     } catch (error) {
       console.error('Error fetching quote:', error);
