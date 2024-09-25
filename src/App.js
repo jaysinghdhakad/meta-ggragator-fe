@@ -55,7 +55,7 @@ const App = () => {
   const handleGetBestAmountOut = async () => {
     try {
       clearData();
-      const response = await axios.post('http://bsccentral.velvetdao.xyz:3000/best-amount-out', {
+      const response = await axios.post('https://bsccentral.velvetdao.xyz/best-amount-out', {
         amount:Number(amount),
         tokenIn:tokenIn,
         tokenOut:tokenOut,
@@ -118,7 +118,7 @@ const App = () => {
 
   const handleGetSwapData = async () => {
     try {
-      const response = await axios.post('http://bsccentral.velvetdao.xyz:3000/swap-data', {
+      const response = await axios.post('https://bsccentral.velvetdao.xyz/swap-data', {
         slippage:Number(slippage),
         amount:Number(amount),
         tokenIn:tokenIn,
