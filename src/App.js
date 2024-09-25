@@ -4,15 +4,21 @@ import { ethers } from 'ethers';
 
 function App() {
   const [formData, setFormData] = useState({
+    chainId: '',
     slippage: 0.1,
     amount: 1000000,
     tokenIn: '',
     tokenOut: '',
     sender: '',
+    receiver: ''
   });
   const [quote, setQuote] = useState(null);
   const [account, setAccount] = useState(null);
   const [provider, setProvider] = useState(null);
+  const [error, setError] = useState(null);
+  const [approvalReceipt, setApprovalReceipt] = useState(null);
+  const [transactionReceipt, setTransactionReceipt] = useState(null);
+
 
   useEffect(() => {
     checkIfWalletIsConnected();
@@ -52,13 +58,32 @@ function App() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const clearData = () => {
+    setQuote(null);
+    setError(null);
+    setApprovalReceipt(null);
+    setTransactionReceipt(null);
+  };
+
+  const handleError = (message) => {
+    setError(message);
+    // Optionally, you can set a timeout to clear the error after a few seconds
+    setTimeout(() => setError(null), 5000);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    clearData(); // Clear previous data
     try {
-      const response = await axios.post('https://meta-aggregator-be.onrender.com/best-quote', formData);
+      const response = await axios.post('http://bsccentral.velvetdao.xyz:3000/best-quote', {
+        ...formData,
+        chainId: parseInt(formData.chainId), // Ensure chainId is sent as a number
+        slippage: parseFloat(formData.slippage) // Ensure slippage is sent as a number
+      });
       setQuote(response.data);
     } catch (error) {
       console.error('Error fetching quote:', error);
+      handleError('Error fetching quote: ' + error.message);
     }
   };
 
@@ -68,7 +93,8 @@ function App() {
     const erc20Contract = new ethers.Contract(formData.tokenIn, ['function approve(address spender, uint256 amount) public returns (bool)'], signer);
     try {
       const tx = await erc20Contract.approve(quote.approvalAddress, ethers.utils.parseUnits(formData.amount.toString(), 18));
-      await tx.wait();
+      const receipt = await tx.wait();
+      setApprovalReceipt(receipt);
       console.log('Approval successful');
     } catch (error) {
       console.error('Error during approval:', error);
@@ -76,7 +102,7 @@ function App() {
   };
 
   const handleTransaction = async () => {
-    console.log({provider,quote})
+    console.log({ provider, quote })
     if (!provider || !quote) return;
     const signer = provider.getSigner();
     try {
@@ -85,7 +111,8 @@ function App() {
         data: quote.data,
         value: ethers.BigNumber.from(quote.value)
       });
-      await tx.wait();
+      const receipt = await tx.wait();
+      setTransactionReceipt(receipt);
       console.log('Transaction successful');
     } catch (error) {
       console.error('Error during transaction:', error);
@@ -101,13 +128,17 @@ function App() {
         <button onClick={connectWallet}>Connect to MetaMask</button>
       )}
       <form onSubmit={handleSubmit}>
+        <input name="chainId" value={formData.chainId} onChange={handleChange} placeholder="Chain ID" />
         <input name="slippage" value={formData.slippage} onChange={handleChange} placeholder="Slippage" />
         <input name="amount" value={formData.amount} onChange={handleChange} placeholder="Amount" />
         <input name="tokenIn" value={formData.tokenIn} onChange={handleChange} placeholder="Token In" />
         <input name="tokenOut" value={formData.tokenOut} onChange={handleChange} placeholder="Token Out" />
         <input name="sender" value={formData.sender} onChange={handleChange} placeholder="Sender" readOnly />
+        <input name="receiver" value={formData.receiver} onChange={handleChange} placeholder="Receiver" />
         <button type="submit">Get Best Quote</button>
       </form>
+
+      {error && <div className="error-message">{error}</div>}
 
       {quote && (
         <div>
@@ -117,6 +148,20 @@ function App() {
           <button onClick={handleTransaction}>Execute Transaction</button>
         </div>
       )}
+      {approvalReceipt && (
+        <div>
+          <h3>Approval Receipt:</h3>
+          <pre>{JSON.stringify(approvalReceipt, null, 2)}</pre>
+        </div>
+      )}
+
+      {transactionReceipt && (
+        <div>
+          <h3>Transaction Receipt:</h3>
+          <pre>{JSON.stringify(transactionReceipt, null, 2)}</pre>
+        </div>
+      )}
+
     </div>
   );
 }
