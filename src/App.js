@@ -75,7 +75,7 @@ function App() {
     e.preventDefault();
     clearData(); // Clear previous data
     try {
-      const response = await axios.post('http://bsccentral.velvetdao.xyz:3000/best-quote', {
+      const response = await axios.post('https://bsccentral.velvetdao.xyz/best-quote', {
         ...formData,
         chainId: parseInt(formData.chainId), // Ensure chainId is sent as a number
         slippage: parseFloat(formData.slippage) // Ensure slippage is sent as a number
