@@ -144,7 +144,7 @@ const App = () => {
     
     if (currentQuoteIndex >= quotes.length) {
       console.log('All quotes have been tried. Fetching new quotes.');
-      await fetchBestQuotes();
+      setSwapStatus('idle');
       return;
     }
 
