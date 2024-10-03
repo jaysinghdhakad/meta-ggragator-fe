@@ -1,169 +1,274 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { ethers } from 'ethers';
 
-function App() {
-  const [formData, setFormData] = useState({
-    chainId: '',
-    slippage: 0.1,
-    amount: 1000000,
+// ERC20 ABI for the approve function
+const ERC20_ABI = [
+  "function approve(address spender, uint256 amount) public returns (bool)"
+];
+
+const App = () => {
+  const [quotes, setQuotes] = useState([]);
+  const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
+  const [swapStatus, setSwapStatus] = useState('idle');
+  const [swapParams, setSwapParams] = useState({
+    chainId: 8453,
+    slippage: 0.5,
+    amount: 0,
     tokenIn: '',
     tokenOut: '',
     sender: '',
     receiver: ''
   });
-  const [quote, setQuote] = useState(null);
-  const [account, setAccount] = useState(null);
-  const [provider, setProvider] = useState(null);
-  const [error, setError] = useState(null);
-  const [approvalReceipt, setApprovalReceipt] = useState(null);
-  const [transactionReceipt, setTransactionReceipt] = useState(null);
-
+  const [isConnected, setIsConnected] = useState(false);
+  const [approvalTx, setApprovalTx] = useState(null);
+  const [swapTx, setSwapTx] = useState(null);
 
   useEffect(() => {
-    checkIfWalletIsConnected();
+    checkConnection();
   }, []);
 
-  const checkIfWalletIsConnected = async () => {
-    if (window.ethereum) {
+  const checkConnection = async () => {
+    if (typeof window.ethereum !== 'undefined') {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
-      setProvider(provider);
-      try {
-        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-        if (accounts.length > 0) {
-          setAccount(accounts[0]);
-          setFormData(prev => ({ ...prev, sender: accounts[0] }));
-        }
-      } catch (error) {
-        console.error("An error occurred while connecting to MetaMask", error);
+      const accounts = await provider.listAccounts();
+      setIsConnected(accounts.length > 0);
+      if (accounts.length > 0) {
+        setSwapParams(prev => ({ ...prev, sender: accounts[0], receiver: accounts[0] }));
       }
     }
   };
 
   const connectWallet = async () => {
-    if (window.ethereum) {
+    if (typeof window.ethereum !== 'undefined') {
       try {
         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        setAccount(accounts[0]);
-        setFormData(prev => ({ ...prev, sender: accounts[0] }));
+        setIsConnected(true);
+        setSwapParams(prev => ({ ...prev, sender: accounts[0], receiver: accounts[0] }));
       } catch (error) {
-        console.error("User denied account access", error);
+        console.error('Failed to connect wallet:', error);
       }
     } else {
-      alert("Please install MetaMask!");
+      alert('Please install MetaMask!');
     }
   };
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setSwapParams(prev => ({
+      ...prev,
+      [name]: name === 'chainID' || name === 'slippage' ? Number(value) : value
+    }));
   };
 
-  const clearData = () => {
-    setQuote(null);
-    setError(null);
-    setApprovalReceipt(null);
-    setTransactionReceipt(null);
-  };
-
-  const handleError = (message) => {
-    setError(message);
-    // Optionally, you can set a timeout to clear the error after a few seconds
-    setTimeout(() => setError(null), 5000);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    clearData(); // Clear previous data
+  const fetchBestQuotes = async () => {
     try {
-      const response = await axios.post('https://bsccentral.velvetdao.xyz/best-quote', {
-        ...formData,
-        chainId: parseInt(formData.chainId), // Ensure chainId is sent as a number
-        slippage: parseFloat(formData.slippage) // Ensure slippage is sent as a number
+      setApprovalTx(null);
+      setSwapTx(null);
+      const response = await fetch('http://localhost:4000/best-quote', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(swapParams),
       });
-      setQuote(response.data);
+      const data = await response.json();
+      setQuotes(data);
+      setCurrentQuoteIndex(0);
+      setSwapStatus('idle');
     } catch (error) {
-      console.error('Error fetching quote:', error);
-      handleError('Error fetching quote: ' + error.message);
+      console.error('Failed to fetch best quotes:', error);
     }
   };
 
-  const handleApproval = async () => {
-    if (!provider || !quote) return;
-    const signer = provider.getSigner();
-    const erc20Contract = new ethers.Contract(formData.tokenIn, ['function approve(address spender, uint256 amount) public returns (bool)'], signer);
+  const handleApproval = async (quote) => {
+    setSwapStatus('approving');
     try {
-      const tx = await erc20Contract.approve(quote.approvalAddress, ethers.utils.parseUnits(formData.amount.toString(), 18));
-      const receipt = await tx.wait();
-      setApprovalReceipt(receipt);
-      console.log('Approval successful');
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      
+      if (swapParams.tokenIn.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
+        console.log('Token is ETH, no approval needed');
+        return true;
+      }
+
+      const tokenContract = new ethers.Contract(swapParams.tokenIn, ERC20_ABI, signer);
+      
+      const approvalAmount = ethers.utils.parseEther(swapParams.amount);
+      const tx = await tokenContract.approve(quote.approvalAddress, approvalAmount);
+      
+      await tx.wait();
+      
+      setApprovalTx({
+        hash: tx.hash,
+        from: await signer.getAddress(),
+        to: swapParams.tokenIn,
+        data: tx.data
+      });
+      return true;
     } catch (error) {
-      console.error('Error during approval:', error);
+      console.error('Approval failed:', error);
+      return false;
     }
   };
 
-  const handleTransaction = async () => {
-    console.log({ provider, quote })
-    if (!provider || !quote) return;
-    const signer = provider.getSigner();
+  const handleSwap = async (quote) => {
+    setSwapStatus('swapping');
     try {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      
       const tx = await signer.sendTransaction({
         to: quote.to,
         data: quote.data,
-        value: ethers.BigNumber.from(quote.value)
+        value: quote.value
       });
-      const receipt = await tx.wait();
-      setTransactionReceipt(receipt);
-      console.log('Transaction successful');
+      await tx.wait();
+      setSwapTx({
+        hash: tx.hash,
+        from: tx.from,
+        to: tx.to,
+        data: tx.data
+      });
+      setSwapStatus('success');
+      return true;
     } catch (error) {
-      console.error('Error during transaction:', error);
+      console.error('Swap failed:', error);
+      setSwapStatus('failed');
+      return false;
+    }
+  };
+
+  const tryNextQuote = async () => {
+    setApprovalTx(null);
+    setSwapTx(null);
+    
+    if (currentQuoteIndex >= quotes.length) {
+      console.log('All quotes have been tried. Fetching new quotes.');
+      await fetchBestQuotes();
+      return;
+    }
+
+    const currentQuote = quotes[currentQuoteIndex];
+    
+    const approvalNeeded = swapParams.tokenIn.toLowerCase() !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+    
+    if (approvalNeeded) {
+      const approvalSuccess = await handleApproval(currentQuote);
+      if (!approvalSuccess) {
+        setCurrentQuoteIndex(prevIndex => prevIndex + 1);
+        tryNextQuote();
+        return;
+      }
+    }
+
+    const swapSuccess = await handleSwap(currentQuote);
+    if (!swapSuccess) {
+      setCurrentQuoteIndex(prevIndex => prevIndex + 1);
+      tryNextQuote();
     }
   };
 
   return (
-    <div className="App">
-      <h1>Best Quote Finder</h1>
-      {account ? (
-        <p>Connected: {account}</p>
+    <div>
+      <h1>Best Quote Swap</h1>
+      {!isConnected ? (
+        <button onClick={connectWallet}>Connect MetaMask</button>
       ) : (
-        <button onClick={connectWallet}>Connect to MetaMask</button>
+        <>
+          <form onSubmit={(e) => { e.preventDefault(); fetchBestQuotes(); }}>
+            <input
+              type="number"
+              name="chainID"
+              value={swapParams.chainID}
+              onChange={handleInputChange}
+              placeholder="Chain ID"
+            />
+            <input
+              type="number"
+              name="slippage"
+              value={swapParams.slippage}
+              onChange={handleInputChange}
+              placeholder="Slippage (%)"
+              step="0.1"
+            />
+            <input
+              type="text"
+              name="amount"
+              value={swapParams.amount}
+              onChange={handleInputChange}
+              placeholder="Amount"
+            />
+            <input
+              type="text"
+              name="tokenIn"
+              value={swapParams.tokenIn}
+              onChange={handleInputChange}
+              placeholder="Token In Address"
+            />
+            <input
+              type="text"
+              name="tokenOut"
+              value={swapParams.tokenOut}
+              onChange={handleInputChange}
+              placeholder="Token Out Address"
+            />
+            <input
+              type="text"
+              name="sender"
+              value={swapParams.sender}
+              onChange={handleInputChange}
+              placeholder="Sender Address"
+            />
+            <input
+              type="text"
+              name="receiver"
+              value={swapParams.receiver}
+              onChange={handleInputChange}
+              placeholder="Receiver Address"
+            />
+            <button type="submit">Get Best Quote</button>
+          </form>
+          <button onClick={tryNextQuote} disabled={swapStatus !== 'idle' && swapStatus !== 'failed'}>
+            Swap
+          </button>
+          <p>Status: {swapStatus}</p>
+          
+          {quotes.length > 0 && (
+            <div>
+              <h2>Best Quotes</h2>
+              <ul>
+                {quotes.map((quote, index) => (
+                  <li key={index}>
+                    Protocol: {quote.protocol}, Amount Out: {quote.amountOut}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          
+          {approvalTx && (
+            <div>
+              <h2>Approval Transaction</h2>
+              <p>Hash: {approvalTx.hash}</p>
+              <p>From: {approvalTx.from}</p>
+              <p>To: {approvalTx.to}</p>
+              <p>Data: {approvalTx.data}</p>
+            </div>
+          )}
+          
+          {swapTx && (
+            <div>
+              <h2>Swap Transaction</h2>
+              <p>Hash: {swapTx.hash}</p>
+              <p>From: {swapTx.from}</p>
+              <p>To: {swapTx.to}</p>
+              <p>Data: {swapTx.data}</p>
+            </div>
+          )}
+        </>
       )}
-      <form onSubmit={handleSubmit}>
-        <input name="chainId" value={formData.chainId} onChange={handleChange} placeholder="Chain ID" />
-        <input name="slippage" value={formData.slippage} onChange={handleChange} placeholder="Slippage" />
-        <input name="amount" value={formData.amount} onChange={handleChange} placeholder="Amount" />
-        <input name="tokenIn" value={formData.tokenIn} onChange={handleChange} placeholder="Token In" />
-        <input name="tokenOut" value={formData.tokenOut} onChange={handleChange} placeholder="Token Out" />
-        <input name="sender" value={formData.sender} onChange={handleChange} placeholder="Sender" readOnly />
-        <input name="receiver" value={formData.receiver} onChange={handleChange} placeholder="Receiver" />
-        <button type="submit">Get Best Quote</button>
-      </form>
-
-      {error && <div className="error-message">{error}</div>}
-
-      {quote && (
-        <div>
-          <h2>Best Quote:</h2>
-          <pre>{JSON.stringify(quote, null, 2)}</pre>
-          <button onClick={handleApproval}>Approve</button>
-          <button onClick={handleTransaction}>Execute Transaction</button>
-        </div>
-      )}
-      {approvalReceipt && (
-        <div>
-          <h3>Approval Receipt:</h3>
-          <pre>{JSON.stringify(approvalReceipt, null, 2)}</pre>
-        </div>
-      )}
-
-      {transactionReceipt && (
-        <div>
-          <h3>Transaction Receipt:</h3>
-          <pre>{JSON.stringify(transactionReceipt, null, 2)}</pre>
-        </div>
-      )}
-
     </div>
   );
-}
+};
 
 export default App;
