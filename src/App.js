@@ -87,7 +87,6 @@ const App = () => {
         ...formData,
         chainId: formData.chainId ? parseInt(formData.chainId) : '',
         slippage: formData.slippage ? parseFloat(formData.slippage) : 0.1,
-        amount: formData.amount ? parseFloat(formData.amount) : 0
       });
       setQuotes(response.data);
       setStatus('idle');
