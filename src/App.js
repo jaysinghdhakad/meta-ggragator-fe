@@ -83,7 +83,7 @@ const App = () => {
     clearData();
     setStatus('fetching quotes');
     try {
-      const response = await axios.post('https://bsccentral.velvetdao.xyz/best-quote', {
+      const response = await axios.post('http://localhost:4000/best-quote', {
         ...formData,
         chainId: formData.chainId ? parseInt(formData.chainId) : '',
         slippage: formData.slippage ? parseFloat(formData.slippage) : 0.1,
@@ -158,7 +158,8 @@ const App = () => {
       const tx = await signer.sendTransaction({
         to: quote.to,
         data: quote.data,
-        value: ethers.BigNumber.from(quote.value)
+        value: ethers.BigNumber.from(quote.value),
+        gasLimit: 12000000 // Added gas limit of 8000000
       });
       
       setStatus(`waiting-${index}`);
