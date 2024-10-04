@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import axios from 'axios';
 
@@ -11,7 +11,7 @@ const App = () => {
   const [formData, setFormData] = useState({
     chainId: 0,
     slippage: 0.1,
-    amount: 0,
+    amount: '',
     tokenIn: '',
     tokenOut: '',
     sender: '',
@@ -22,6 +22,41 @@ const App = () => {
   const [error, setError] = useState(null);
   const [approvalReceipts, setApprovalReceipts] = useState({});
   const [transactionReceipts, setTransactionReceipts] = useState({});
+  const [isConnected, setIsConnected] = useState(false);
+  const [account, setAccount] = useState('');
+
+  useEffect(() => {
+    checkIfWalletIsConnected();
+  }, []);
+
+  const checkIfWalletIsConnected = async () => {
+    if (window.ethereum) {
+      try {
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (accounts.length > 0) {
+          setIsConnected(true);
+          setAccount(accounts[0]);
+        }
+      } catch (error) {
+        console.error("An error occurred while checking the wallet connection:", error);
+      }
+    }
+  };
+
+  const connectWallet = async () => {
+    if (window.ethereum) {
+      try {
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        setIsConnected(true);
+        setAccount(accounts[0]);
+      } catch (error) {
+        console.error("An error occurred while connecting the wallet:", error);
+        setError("Failed to connect wallet: " + error.message);
+      }
+    } else {
+      setError("MetaMask is not installed. Please install it to use this app.");
+    }
+  };
 
   const clearData = () => {
     setQuotes([]);
@@ -41,6 +76,10 @@ const App = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isConnected) {
+      setError("Please connect your wallet first.");
+      return;
+    }
     clearData();
     setStatus('fetching quotes');
     try {
@@ -60,6 +99,10 @@ const App = () => {
   };
 
   const handleApproval = async (quote, index) => {
+    if (!isConnected) {
+      setError("Please connect your wallet first.");
+      return;
+    }
     setStatus(`approving-${index}`);
     try {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -104,6 +147,10 @@ const App = () => {
   };
 
   const handleSwap = async (quote, index) => {
+    if (!isConnected) {
+      setError("Please connect your wallet first.");
+      return;
+    }
     setStatus(`swapping-${index}`);
     try {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -142,6 +189,11 @@ const App = () => {
   return (
     <div className="App">
       <h1>Best Quote Swap</h1>
+      {!isConnected ? (
+        <button onClick={connectWallet}>Connect to MetaMask</button>
+      ) : (
+        <p>Connected Account: {account}</p>
+      )}
       <form onSubmit={handleSubmit}>
         <input
           type="number"
@@ -193,7 +245,7 @@ const App = () => {
           onChange={handleChange}
           placeholder="Receiver Address"
         />
-        <button type="submit">Get Best Quote</button>
+        <button type="submit" disabled={!isConnected}>Get Best Quote</button>
       </form>
 
       <p>Status: {status}</p>
@@ -209,13 +261,13 @@ const App = () => {
                 <p>Amount Out: {quote.amountOut}</p>
                 <button 
                   onClick={() => handleApproval(quote, index)} 
-                  disabled={status.startsWith('approving') || status.startsWith('swapping')}
+                  disabled={!isConnected || status.startsWith('approving') || status.startsWith('swapping')}
                 >
                   Approve
                 </button>
                 <button 
                   onClick={() => handleSwap(quote, index)} 
-                  disabled={status.startsWith('approving') || status.startsWith('swapping') || !approvalReceipts[index]}
+                  disabled={!isConnected || status.startsWith('approving') || status.startsWith('swapping') || !approvalReceipts[index]}
                 >
                   Swap
                 </button>
