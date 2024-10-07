@@ -83,7 +83,7 @@ const App = () => {
     clearData();
     setStatus('fetching quotes');
     try {
-      const response = await axios.post('http://localhost:4000/best-quote', {
+      const response = await axios.post('https://bsccentral.velvetdao.xyz/best-quote', {
         ...formData,
         chainId: formData.chainId ? parseInt(formData.chainId) : '',
         slippage: formData.slippage ? parseFloat(formData.slippage) : 0.1,
