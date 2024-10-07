@@ -102,17 +102,19 @@ const App = () => {
       setError("Please connect your wallet first.");
       return;
     }
+    
+    // Check if the token is ETH (0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee)
+    if (formData.tokenIn.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
+      console.log('Token is ETH, proceeding directly to swap');
+      handleSwap(quote, index);
+      return;
+    }
+  
     setStatus(`approving-${index}`);
     try {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
-      
-      if (formData.tokenIn.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
-        console.log('Token is ETH, no approval needed');
-        setStatus('idle');
-        return;
-      }
-
+  
       const tokenContract = new ethers.Contract(formData.tokenIn, ERC20_ABI, signer);
       
       const approvalAmount = ethers.utils.parseEther(formData.amount.toString());
@@ -159,7 +161,7 @@ const App = () => {
         to: quote.to,
         data: quote.data,
         value: ethers.BigNumber.from(quote.value),
-        gasLimit: 12000000 // Added gas limit of 8000000
+        gasLimit: 12000000 // Added gas limit of 12000000
       });
       
       setStatus(`waiting-${index}`);
@@ -261,13 +263,13 @@ const App = () => {
                 <p>Amount Out: {quote.amountOut}</p>
                 <button 
                   onClick={() => handleApproval(quote, index)} 
-                  disabled={!isConnected || status.startsWith('approving') || status.startsWith('swapping')}
+                  disabled={!isConnected || status.startsWith('approving') || status.startsWith('swapping') || formData.tokenIn.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'}
                 >
-                  Approve
+                  {formData.tokenIn.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ? 'No Approval Needed' : 'Approve'}
                 </button>
                 <button 
                   onClick={() => handleSwap(quote, index)} 
-                  disabled={!isConnected || status.startsWith('approving') || status.startsWith('swapping') || !approvalReceipts[index]}
+                  disabled={!isConnected || status.startsWith('approving') || status.startsWith('swapping') || (!approvalReceipts[index] && formData.tokenIn.toLowerCase() !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee')}
                 >
                   Swap
                 </button>
