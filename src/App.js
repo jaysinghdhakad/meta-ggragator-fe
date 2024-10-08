@@ -9,7 +9,7 @@ const ERC20_ABI = [
 
 const App = () => {
   const [formData, setFormData] = useState({
-    chainId: 0,
+    chainId: 8453,
     slippage: 0.1,
     amount: '',
     tokenIn: '',
@@ -83,7 +83,7 @@ const App = () => {
     clearData();
     setStatus('fetching quotes');
     try {
-      const response = await axios.post('https://bsccentral.velvetdao.xyz/best-quote', {
+      const response = await axios.post('https://bsccentral.velvetdao.xyz/best-quotes', {
         ...formData,
         chainId: formData.chainId ? parseInt(formData.chainId) : '',
         slippage: formData.slippage ? parseFloat(formData.slippage) : 0.1,
@@ -103,7 +103,6 @@ const App = () => {
       return;
     }
     
-    // Check if the token is ETH (0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee)
     if (formData.tokenIn.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
       console.log('Token is ETH, proceeding directly to swap');
       handleSwap(quote, index);
@@ -138,7 +137,7 @@ const App = () => {
       setStatus('idle');
     } catch (error) {
       console.error('Approval failed:', error);
-      if (error.code === 4001) { // User rejected the transaction
+      if (error.code === 4001) {
         setError('Approval rejected by user.');
       } else {
         setError('Approval failed: ' + error.message);
@@ -161,7 +160,7 @@ const App = () => {
         to: quote.to,
         data: quote.data,
         value: ethers.BigNumber.from(quote.value),
-        gasLimit: 12000000 // Added gas limit of 12000000
+        gasLimit: 8000000 // Added gas limit of 8000000
       });
       
       setStatus(`waiting-${index}`);
@@ -179,7 +178,7 @@ const App = () => {
       setStatus('swap successful');
     } catch (error) {
       console.error('Swap failed:', error);
-      if (error.code === 4001) { // User rejected the transaction
+      if (error.code === 4001) {
         setError('Swap rejected by user.');
       } else {
         setError('Swap failed: ' + error.message);
@@ -261,35 +260,41 @@ const App = () => {
               <li key={index}>
                 <p>Protocol: {quote.protocol}</p>
                 <p>Amount Out: {quote.amountOut}</p>
-                <button 
-                  onClick={() => handleApproval(quote, index)} 
-                  disabled={!isConnected || status.startsWith('approving') || status.startsWith('swapping') || formData.tokenIn.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'}
-                >
-                  {formData.tokenIn.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ? 'No Approval Needed' : 'Approve'}
-                </button>
-                <button 
-                  onClick={() => handleSwap(quote, index)} 
-                  disabled={!isConnected || status.startsWith('approving') || status.startsWith('swapping') || (!approvalReceipts[index] && formData.tokenIn.toLowerCase() !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee')}
-                >
-                  Swap
-                </button>
-                {approvalReceipts[index] && (
-                  <div>
-                    <h3>Approval Receipt</h3>
-                    <p>Hash: {approvalReceipts[index].hash}</p>
-                    <p>From: {approvalReceipts[index].from}</p>
-                    <p>To: {approvalReceipts[index].to}</p>
-                    <p>Block Number: {approvalReceipts[index].blockNumber}</p>
-                  </div>
-                )}
-                {transactionReceipts[index] && (
-                  <div>
-                    <h3>Swap Receipt</h3>
-                    <p>Hash: {transactionReceipts[index].hash}</p>
-                    <p>From: {transactionReceipts[index].from}</p>
-                    <p>To: {transactionReceipts[index].to}</p>
-                    <p>Block Number: {transactionReceipts[index].blockNumber}</p>
-                  </div>
+                {quote.message ? (
+                  <p className="quote-message">{quote.message}</p>
+                ) : (
+                  <>
+                    <button 
+                      onClick={() => handleApproval(quote, index)} 
+                      disabled={!isConnected || status.startsWith('approving') || status.startsWith('swapping') || formData.tokenIn.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'}
+                    >
+                      {formData.tokenIn.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ? 'No Approval Needed' : 'Approve'}
+                    </button>
+                    <button 
+                      onClick={() => handleSwap(quote, index)} 
+                      disabled={!isConnected || status.startsWith('approving') || status.startsWith('swapping') || (!approvalReceipts[index] && formData.tokenIn.toLowerCase() !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee')}
+                    >
+                      Swap
+                    </button>
+                    {approvalReceipts[index] && (
+                      <div>
+                        <h3>Approval Receipt</h3>
+                        <p>Hash: {approvalReceipts[index].hash}</p>
+                        <p>From: {approvalReceipts[index].from}</p>
+                        <p>To: {approvalReceipts[index].to}</p>
+                        <p>Block Number: {approvalReceipts[index].blockNumber}</p>
+                      </div>
+                    )}
+                    {transactionReceipts[index] && (
+                      <div>
+                        <h3>Swap Receipt</h3>
+                        <p>Hash: {transactionReceipts[index].hash}</p>
+                        <p>From: {transactionReceipts[index].from}</p>
+                        <p>To: {transactionReceipts[index].to}</p>
+                        <p>Block Number: {transactionReceipts[index].blockNumber}</p>
+                      </div>
+                    )}
+                  </>
                 )}
               </li>
             ))}
