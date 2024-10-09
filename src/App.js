@@ -83,7 +83,7 @@ const App = () => {
     clearData();
     setStatus('fetching quotes');
     try {
-      const response = await axios.post('https://bsccentral.velvetdao.xyz/best-quotes', {
+      const response = await axios.post('http://localhost:4000/best-quotes', {
         ...formData,
         chainId: formData.chainId ? parseInt(formData.chainId) : '',
         slippage: formData.slippage ? parseFloat(formData.slippage) : 0.1,
@@ -260,6 +260,7 @@ const App = () => {
               <li key={index}>
                 <p>Protocol: {quote.protocol}</p>
                 <p>Amount Out: {quote.amountOut}</p>
+                <p>Price Impact: {parseFloat(quote.priceImpactPercentage).toFixed(2)}%</p>
                 {quote.message ? (
                   <p className="quote-message">{quote.message}</p>
                 ) : (
