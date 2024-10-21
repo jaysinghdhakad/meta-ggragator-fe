@@ -9,7 +9,7 @@ const ERC20_ABI = [
 
 const App = () => {
   const [formData, setFormData] = useState({
-    chainId: 8453,
+    chainId: 0,
     slippage: 0.1,
     amount: '',
     tokenIn: '',
@@ -17,13 +17,16 @@ const App = () => {
     sender: '',
     receiver: ''
   });
+
+  const approvalAddress = "0x5400108A4b7AF6287c891B678F2Fc4A3f0BBaB9c"
   const [quotes, setQuotes] = useState([]);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
-  const [approvalReceipts, setApprovalReceipts] = useState({});
+  const [approvalReceipt, setApprovalReceipt] = useState(null);
   const [transactionReceipts, setTransactionReceipts] = useState({});
   const [isConnected, setIsConnected] = useState(false);
   const [account, setAccount] = useState('');
+  const [isApproved, setIsApproved] = useState(false); // Track approval status
 
   useEffect(() => {
     checkIfWalletIsConnected();
@@ -62,8 +65,9 @@ const App = () => {
     setQuotes([]);
     setStatus('idle');
     setError(null);
-    setApprovalReceipts({});
+    setApprovalReceipt(null);
     setTransactionReceipts({});
+    setIsApproved(false); // Reset approval status
   };
 
   const handleChange = (e) => {
@@ -88,7 +92,9 @@ const App = () => {
         chainId: formData.chainId ? parseInt(formData.chainId) : '',
         slippage: formData.slippage ? parseFloat(formData.slippage) : 0.1,
       });
-      setQuotes(response.data);
+      
+      // Extract quotes from the response
+      setQuotes(response.data.quotes);
       setStatus('idle');
     } catch (error) {
       console.error('Error fetching quotes:', error);
@@ -97,47 +103,42 @@ const App = () => {
     }
   };
 
-  const handleApproval = async (quote, index) => {
+  const handleApproval = async () => {
     if (!isConnected) {
       setError("Please connect your wallet first.");
       return;
     }
-    
-    if (formData.tokenIn.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
-      console.log('Token is ETH, proceeding directly to swap');
-      handleSwap(quote, index);
-      return;
+
+    if (isApproved) {
+      console.log('Already approved, proceeding to swap.');
+      return; // Skip if already approved
     }
-  
-    setStatus(`approving-${index}`);
+
+    setStatus('approving');
     try {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
-  
       const tokenContract = new ethers.Contract(formData.tokenIn, ERC20_ABI, signer);
       
       const approvalAmount = ethers.utils.parseEther(formData.amount.toString());
-      const tx = await tokenContract.approve(quote.approvalAddress, approvalAmount);
+      const tx = await tokenContract.approve(approvalAddress, approvalAmount);
       
-      setStatus(`waiting-approval-${index}`);
+      setStatus('waiting-approval');
       const receipt = await tx.wait();
       
       const signerAddress = await signer.getAddress();
-      
-      setApprovalReceipts(prev => ({
-        ...prev,
-        [index]: {
-          hash: receipt.transactionHash,
-          from: signerAddress,
-          to: formData.tokenIn,
-          blockNumber: receipt.blockNumber
-        }
-      }));
+      setApprovalReceipt({
+        hash: receipt.transactionHash,
+        from: signerAddress,
+        to: formData.tokenIn,
+        blockNumber: receipt.blockNumber
+      });
       console.log('Approval successful');
+      setIsApproved(true); // Set approval status to true
       setStatus('idle');
     } catch (error) {
       console.error('Approval failed:', error);
-      if (error.code === 4001) {
+      if (error.code === 4001) { // User rejected the transaction
         setError('Approval rejected by user.');
       } else {
         setError('Approval failed: ' + error.message);
@@ -151,6 +152,11 @@ const App = () => {
       setError("Please connect your wallet first.");
       return;
     }
+    if (!isApproved) {
+      setError("Please approve the token first.");
+      return; // Ensure approval is done before swapping
+    }
+    
     setStatus(`swapping-${index}`);
     try {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -160,7 +166,7 @@ const App = () => {
         to: quote.to,
         data: quote.data,
         value: ethers.BigNumber.from(quote.value),
-        gasLimit: 8000000 // Added gas limit of 8000000
+        gasLimit: 12000000 // Added gas limit of 12000000
       });
       
       setStatus(`waiting-${index}`);
@@ -178,7 +184,7 @@ const App = () => {
       setStatus('swap successful');
     } catch (error) {
       console.error('Swap failed:', error);
-      if (error.code === 4001) {
+      if (error.code === 4001) { // User rejected the transaction
         setError('Swap rejected by user.');
       } else {
         setError('Swap failed: ' + error.message);
@@ -255,47 +261,27 @@ const App = () => {
       {quotes.length > 0 && (
         <div>
           <h2>Quotes:</h2>
+          <button onClick={handleApproval} disabled={isApproved}>Approve All</button>
           <ul>
             {quotes.map((quote, index) => (
               <li key={index}>
                 <p>Protocol: {quote.protocol}</p>
                 <p>Amount Out: {quote.amountOut}</p>
                 <p>Price Impact: {parseFloat(quote.priceImpactPercentage).toFixed(2)}%</p>
-                {quote.message ? (
-                  <p className="quote-message">{quote.message}</p>
-                ) : (
-                  <>
-                    <button 
-                      onClick={() => handleApproval(quote, index)} 
-                      disabled={!isConnected || status.startsWith('approving') || status.startsWith('swapping') || formData.tokenIn.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'}
-                    >
-                      {formData.tokenIn.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ? 'No Approval Needed' : 'Approve'}
-                    </button>
-                    <button 
-                      onClick={() => handleSwap(quote, index)} 
-                      disabled={!isConnected || status.startsWith('approving') || status.startsWith('swapping') || (!approvalReceipts[index] && formData.tokenIn.toLowerCase() !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee')}
-                    >
-                      Swap
-                    </button>
-                    {approvalReceipts[index] && (
-                      <div>
-                        <h3>Approval Receipt</h3>
-                        <p>Hash: {approvalReceipts[index].hash}</p>
-                        <p>From: {approvalReceipts[index].from}</p>
-                        <p>To: {approvalReceipts[index].to}</p>
-                        <p>Block Number: {approvalReceipts[index].blockNumber}</p>
-                      </div>
-                    )}
-                    {transactionReceipts[index] && (
-                      <div>
-                        <h3>Swap Receipt</h3>
-                        <p>Hash: {transactionReceipts[index].hash}</p>
-                        <p>From: {transactionReceipts[index].from}</p>
-                        <p>To: {transactionReceipts[index].to}</p>
-                        <p>Block Number: {transactionReceipts[index].blockNumber}</p>
-                      </div>
-                    )}
-                  </>
+                <button 
+                  onClick={() => handleSwap(quote, index)} 
+                  disabled={!isConnected || status.startsWith('approving') || status.startsWith('swapping') || !isApproved}
+                >
+                  Swap
+                </button>
+                {transactionReceipts[index] && (
+                  <div>
+                    <h3>Swap Receipt</h3>
+                    <p>Hash: {transactionReceipts[index].hash}</p>
+                    <p>From: {transactionReceipts[index].from}</p>
+                    <p>To: {transactionReceipts[index].to}</p>
+                    <p>Block Number: {transactionReceipts[index].blockNumber}</p>
+                  </div>
                 )}
               </li>
             ))}
