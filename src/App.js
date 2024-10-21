@@ -119,7 +119,7 @@ const App = () => {
       const tokenContract = new ethers.Contract(formData.tokenIn, ERC20_ABI, signer);
       
       const approvalAmount = ethers.utils.parseEther(formData.amount.toString());
-      const tx = await tokenContract.approve(quotes[0].approvalAddress, approvalAmount);
+      const tx = await tokenContract.approve(quotes.approvalAddress, approvalAmount);
       
       setStatus('waiting-approval');
       const receipt = await tx.wait();
