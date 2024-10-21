@@ -9,7 +9,7 @@ const ERC20_ABI = [
 
 const App = () => {
   const [formData, setFormData] = useState({
-    chainId: 0,
+    chainId: 8453,
     slippage: 0.1,
     amount: '',
     tokenIn: '',
@@ -17,8 +17,6 @@ const App = () => {
     sender: '',
     receiver: ''
   });
-
-  const approvalAddress = "0x5400108A4b7AF6287c891B678F2Fc4A3f0BBaB9c"
   const [quotes, setQuotes] = useState([]);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
@@ -121,7 +119,7 @@ const App = () => {
       const tokenContract = new ethers.Contract(formData.tokenIn, ERC20_ABI, signer);
       
       const approvalAmount = ethers.utils.parseEther(formData.amount.toString());
-      const tx = await tokenContract.approve(approvalAddress, approvalAmount);
+      const tx = await tokenContract.approve(quotes[0].approvalAddress, approvalAmount);
       
       setStatus('waiting-approval');
       const receipt = await tx.wait();
@@ -257,6 +255,16 @@ const App = () => {
 
       <p>Status: {status}</p>
       {error && <p className="error">{error}</p>}
+
+      {approvalReceipt && (
+        <div>
+          <h3>Approval Receipt</h3>
+          <p>Hash: {approvalReceipt.hash}</p>
+          <p>From: {approvalReceipt.from}</p>
+          <p>To: {approvalReceipt.to}</p>
+          <p>Block Number: {approvalReceipt.blockNumber}</p>
+        </div>
+      )}
 
       {quotes.length > 0 && (
         <div>
