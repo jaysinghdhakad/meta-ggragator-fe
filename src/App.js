@@ -17,6 +17,7 @@ const App = () => {
     sender: '',
     receiver: ''
   });
+  const [approvalAddress,setApporvalAddress] = useState("")
   const [quotes, setQuotes] = useState([]);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
@@ -93,6 +94,7 @@ const App = () => {
       
       // Extract quotes from the response
       setQuotes(response.data.quotes);
+      setApporvalAddress(response.data.approvalAddress)
       setStatus('idle');
     } catch (error) {
       console.error('Error fetching quotes:', error);
@@ -119,7 +121,8 @@ const App = () => {
       const tokenContract = new ethers.Contract(formData.tokenIn, ERC20_ABI, signer);
       
       const approvalAmount = ethers.utils.parseEther(formData.amount.toString());
-      const tx = await tokenContract.approve(quotes.approvalAddress, approvalAmount);
+      console.log(quotes)
+      const tx = await tokenContract.approve(approvalAddress, approvalAmount);
       
       setStatus('waiting-approval');
       const receipt = await tx.wait();
