@@ -1,306 +1,196 @@
-import React, { useState, useEffect } from 'react';
-import { ethers } from 'ethers';
-import axios from 'axios';
+import React, { useState } from 'react';
+import {
+    ConnectionProvider,
+    WalletProvider,
+    useWallet
+} from '@solana/wallet-adapter-react';
+import {
+    PhantomWalletName,
+    PhantomWalletAdapter
+} from '@solana/wallet-adapter-phantom';
+import { clusterApiUrl, Connection, VersionedTransaction } from '@solana/web3.js';
+import {Buffer} from 'buffer';
 
-// ERC20 ABI for the approve function
-const ERC20_ABI = [
-  "function approve(address spender, uint256 amount) public returns (bool)"
-];
+const Quotes = () => {
+    const [quotes, setQuotes] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [params, setParams] = useState({
+        slippage: '',
+        amount: '',
+        tokenIn: '',
+        tokenOut: '',
+        sender: ''
+    });
+    const { publicKey, connected, disconnect, select, wallet } = useWallet();
+    const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=7ea8c2f9-658e-4675-9858-6a2a51aee843', 'confirmed');
 
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setParams((prevParams) => ({ ...prevParams, [name]: value }));
+    };
+
+    const fetchQuotes = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await fetch('http://localhost:4000/getQuote', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ ...params, sender: publicKey.toString() }),
+            });
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            const data = await response.json();
+            setQuotes(data);
+        } catch (error) {
+            setError(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        fetchQuotes();
+    };
+
+    const executeTransaction = async (swapData) => {
+        if (!connected) {
+            alert('Please connect your wallet first.');
+            return;
+        }
+
+        try {
+            const { solana } = window;
+
+            console.log("__________________________", solana.isPhantom)
+
+
+             const swapTransactionBuf = Buffer.from(swapData, 'base64');
+             var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+             console.log("___________________________________________wallet",wallet)
+             console.log(wallet.adapter.signTransaction)
+             const signedTransaction = await wallet.adapter.signTransaction(transaction)
+             // Send the transaction
+
+             const latestBlockHash = await connection.getLatestBlockhash();
+
+
+             console.log(latestBlockHash)
+
+             // Execute the transactionp.
+             const rawTransaction = transaction.serialize()
+             const txid = await connection.sendRawTransaction(rawTransaction, {
+               skipPreflight: true,
+               maxRetries: 2
+             });
+             await connection.confirmTransaction({
+               blockhash: latestBlockHash.blockhash,
+               lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
+               signature: txid
+             });
+             
+ 
+             console.log('Transaction successful with signature:', txid);
+        } catch (error) {
+            console.error('Transaction failed:', error);
+        }
+    };
+
+    const handleSwap = (quote) => {
+        executeTransaction(quote.swapData);
+    };
+
+    const handleConnect = async () => {
+        try {
+            await select(PhantomWalletName); // Select the Phantom wallet
+        } catch (error) {
+            console.error('Connection failed:', error);
+        }
+    };
+
+    if (loading) {
+        return <div>Loading...</div>;
+    }
+
+    if (error) {
+        return <div>Error: {error}</div>;
+    }
+
+    return (
+        <div>
+            <h1>Get Quotes</h1>
+            {!connected ? (
+                <button onClick={handleConnect}>Connect to Phantom Wallet</button> 
+            ) : (
+                <div>
+                    <p>Connected: {publicKey.toString()}</p>
+                    <button onClick={disconnect}>Disconnect</button>
+                </div>
+            )}
+            <form onSubmit={handleSubmit}>
+                <input
+                    type="number"
+                    name="slippage"
+                    value={params.slippage}
+                    onChange={handleChange}
+                    placeholder="Slippage"
+                    required
+                />
+                <input
+                    type="number"
+                    name="amount"
+                    value={params.amount}
+                    onChange={handleChange}
+                    placeholder="Amount"
+                    required
+                />
+                <input
+                    type="text"
+                    name="tokenIn"
+                    value={params.tokenIn}
+                    onChange={handleChange}
+                    placeholder="Token In"
+                    required
+                />
+                <input
+                    type="text"
+                    name="tokenOut"
+                    value={params.tokenOut}
+                    onChange={handleChange}
+                    placeholder="Token Out"
+                    required
+                />
+                <button type="submit">Get Quotes</button>
+            </form>
+            <ul>
+                {quotes.map((quote, index) => (
+                    <li key={index}>
+                        {JSON.stringify(quote)}
+                        <button onClick={() => handleSwap(quote)}>Swap</button>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+};
+
+// Main App Component
 const App = () => {
-  const [formData, setFormData] = useState({
-    chainId: 8453,
-    slippage: 0.1,
-    amount: '',
-    tokenIn: '',
-    tokenOut: '',
-    sender: '',
-    receiver: ''
-  });
-  const [approvalAddress,setApporvalAddress] = useState("")
-  const [quotes, setQuotes] = useState([]);
-  const [status, setStatus] = useState('idle');
-  const [error, setError] = useState(null);
-  const [approvalReceipt, setApprovalReceipt] = useState(null);
-  const [transactionReceipts, setTransactionReceipts] = useState({});
-  const [isConnected, setIsConnected] = useState(false);
-  const [account, setAccount] = useState('');
-  const [isApproved, setIsApproved] = useState(false); // Track approval status
+    const endpoint = clusterApiUrl('mainnet-beta'); // Change to 'mainnet-beta' for mainnet
+    const wallets = [new PhantomWalletAdapter()];
 
-  useEffect(() => {
-    checkIfWalletIsConnected();
-  }, []);
-
-  const checkIfWalletIsConnected = async () => {
-    if (window.ethereum) {
-      try {
-        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-        if (accounts.length > 0) {
-          setIsConnected(true);
-          setAccount(accounts[0]);
-        }
-      } catch (error) {
-        console.error("An error occurred while checking the wallet connection:", error);
-      }
-    }
-  };
-
-  const connectWallet = async () => {
-    if (window.ethereum) {
-      try {
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        setIsConnected(true);
-        setAccount(accounts[0]);
-      } catch (error) {
-        console.error("An error occurred while connecting the wallet:", error);
-        setError("Failed to connect wallet: " + error.message);
-      }
-    } else {
-      setError("MetaMask is not installed. Please install it to use this app.");
-    }
-  };
-
-  const clearData = () => {
-    setQuotes([]);
-    setStatus('idle');
-    setError(null);
-    setApprovalReceipt(null);
-    setTransactionReceipts({});
-    setIsApproved(false); // Reset approval status
-  };
-
-  const handleChange = (e) => {
-    const { name, value, type } = e.target;
-    setFormData(prevData => ({
-      ...prevData,
-      [name]: type === 'number' ? (value === '' ? '' : Number(value)) : value
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!isConnected) {
-      setError("Please connect your wallet first.");
-      return;
-    }
-    clearData();
-    setStatus('fetching quotes');
-    try {
-      const response = await axios.post('https://metasolvertest.velvetdao.xyz/best-quotes', {
-        ...formData,
-        chainId: formData.chainId ? parseInt(formData.chainId) : '',
-        slippage: formData.slippage ? parseFloat(formData.slippage) : 0.1,
-      });
-      
-      // Extract quotes from the response
-      setQuotes(response.data.quotes);
-      setApporvalAddress(response.data.approvalAddress)
-      setStatus('idle');
-    } catch (error) {
-      console.error('Error fetching quotes:', error);
-      setError('Error fetching quotes: ' + error.message);
-      setStatus('error');
-    }
-  };
-
-  const handleApproval = async () => {
-    if (!isConnected) {
-      setError("Please connect your wallet first.");
-      return;
-    }
-
-    if (isApproved) {
-      console.log('Already approved, proceeding to swap.');
-      return; // Skip if already approved
-    }
-
-    setStatus('approving');
-    try {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
-      const tokenContract = new ethers.Contract(formData.tokenIn, ERC20_ABI, signer);
-      
-      const approvalAmount = ethers.utils.parseEther(formData.amount.toString());
-      console.log(quotes)
-      const tx = await tokenContract.approve(approvalAddress, approvalAmount);
-      
-      setStatus('waiting-approval');
-      const receipt = await tx.wait();
-      
-      const signerAddress = await signer.getAddress();
-      setApprovalReceipt({
-        hash: receipt.transactionHash,
-        from: signerAddress,
-        to: formData.tokenIn,
-        blockNumber: receipt.blockNumber
-      });
-      console.log('Approval successful');
-      setIsApproved(true); // Set approval status to true
-      setStatus('idle');
-    } catch (error) {
-      console.error('Approval failed:', error);
-      if (error.code === 4001) { // User rejected the transaction
-        setError('Approval rejected by user.');
-      } else {
-        setError('Approval failed: ' + error.message);
-      }
-      setStatus('idle');
-    }
-  };
-
-  const handleSwap = async (quote, index) => {
-    if (!isConnected) {
-      setError("Please connect your wallet first.");
-      return;
-    }
-    if (!isApproved) {
-      setError("Please approve the token first.");
-      return; // Ensure approval is done before swapping
-    }
-    
-    setStatus(`swapping-${index}`);
-    try {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
-      
-      const tx = await signer.sendTransaction({
-        to: quote.to,
-        data: quote.data,
-        value: ethers.BigNumber.from(quote.value),
-        gasLimit: 12000000 // Added gas limit of 12000000
-      });
-      
-      setStatus(`waiting-${index}`);
-      const receipt = await tx.wait();
-      
-      setTransactionReceipts(prev => ({
-        ...prev,
-        [index]: {
-          hash: receipt.transactionHash,
-          from: receipt.from,
-          to: receipt.to,
-          blockNumber: receipt.blockNumber
-        }
-      }));
-      setStatus('swap successful');
-    } catch (error) {
-      console.error('Swap failed:', error);
-      if (error.code === 4001) { // User rejected the transaction
-        setError('Swap rejected by user.');
-      } else {
-        setError('Swap failed: ' + error.message);
-      }
-      setStatus('idle');
-    }
-  };
-
-  return (
-    <div className="App">
-      <h1>Best Quote Swap</h1>
-      {!isConnected ? (
-        <button onClick={connectWallet}>Connect to MetaMask</button>
-      ) : (
-        <p>Connected Account: {account}</p>
-      )}
-      <form onSubmit={handleSubmit}>
-        <input
-          type="number"
-          name="chainId"
-          value={formData.chainId}
-          onChange={handleChange}
-          placeholder="Chain ID"
-        />
-        <input
-          type="number"
-          name="slippage"
-          value={formData.slippage}
-          onChange={handleChange}
-          placeholder="Slippage (%)"
-          step="0.1"
-        />
-        <input
-          type="text"
-          name="amount"
-          value={formData.amount}
-          onChange={handleChange}
-          placeholder="Amount"
-        />
-        <input
-          type="text"
-          name="tokenIn"
-          value={formData.tokenIn}
-          onChange={handleChange}
-          placeholder="Token In Address"
-        />
-        <input
-          type="text"
-          name="tokenOut"
-          value={formData.tokenOut}
-          onChange={handleChange}
-          placeholder="Token Out Address"
-        />
-        <input
-          type="text"
-          name="sender"
-          value={formData.sender}
-          onChange={handleChange}
-          placeholder="Sender Address"
-        />
-        <input
-          type="text"
-          name="receiver"
-          value={formData.receiver}
-          onChange={handleChange}
-          placeholder="Receiver Address"
-        />
-        <button type="submit" disabled={!isConnected}>Get Best Quote</button>
-      </form>
-
-      <p>Status: {status}</p>
-      {error && <p className="error">{error}</p>}
-
-      {approvalReceipt && (
-        <div>
-          <h3>Approval Receipt</h3>
-          <p>Hash: {approvalReceipt.hash}</p>
-          <p>From: {approvalReceipt.from}</p>
-          <p>To: {approvalReceipt.to}</p>
-          <p>Block Number: {approvalReceipt.blockNumber}</p>
-        </div>
-      )}
-
-      {quotes.length > 0 && (
-        <div>
-          <h2>Quotes:</h2>
-          <button onClick={handleApproval} disabled={isApproved}>Approve All</button>
-          <ul>
-            {quotes.map((quote, index) => (
-              <li key={index}>
-                <p>Protocol: {quote.protocol}</p>
-                <p>Amount Out: {quote.amountOut}</p>
-                <p>Price Impact: {parseFloat(quote.priceImpactPercentage).toFixed(2)}%</p>
-                <button 
-                  onClick={() => handleSwap(quote, index)} 
-                  disabled={!isConnected || status.startsWith('approving') || status.startsWith('swapping') || !isApproved}
-                >
-                  Swap
-                </button>
-                {transactionReceipts[index] && (
-                  <div>
-                    <h3>Swap Receipt</h3>
-                    <p>Hash: {transactionReceipts[index].hash}</p>
-                    <p>From: {transactionReceipts[index].from}</p>
-                    <p>To: {transactionReceipts[index].to}</p>
-                    <p>Block Number: {transactionReceipts[index].blockNumber}</p>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
+    return (
+        <ConnectionProvider endpoint={endpoint}>
+            <WalletProvider wallets={wallets} autoConnect>
+                <Quotes />
+            </WalletProvider>
+        </ConnectionProvider>
+    );
 };
 
 export default App;
