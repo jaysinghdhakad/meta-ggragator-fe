@@ -8,10 +8,12 @@ import {
     PhantomWalletName,
     PhantomWalletAdapter
 } from '@solana/wallet-adapter-phantom';
-import { clusterApiUrl, Connection, VersionedTransaction } from '@solana/web3.js';
-import {Buffer} from 'buffer';
+import { clusterApiUrl, Connection, VersionedTransaction, ComputeBudgetProgram } from '@solana/web3.js';
+import { Buffer } from 'buffer';
 
 const Quotes = () => {
+    const [transactionHashes, setTransactionHashes] = useState(null);
+
     const [quotes, setQuotes] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -33,6 +35,8 @@ const Quotes = () => {
     const fetchQuotes = async () => {
         setLoading(true);
         setError(null);
+        setQuotes(null);
+        setTransactionHashes(null);
         try {
             const response = await fetch('http://localhost:4000/getQuote', {
                 method: 'POST',
@@ -67,42 +71,43 @@ const Quotes = () => {
         try {
             const { solana } = window;
 
-            console.log("__________________________", solana.isPhantom)
+
+            const swapTransactionBuf = Buffer.from(swapData, 'base64');
+            var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+
+            const signedTransaction = await wallet.adapter.signTransaction(transaction)
+            // Send the transaction
+
+            const latestBlockHash = await connection.getLatestBlockhash();
+
+            // Execute the transactionp.
+            const rawTransaction = signedTransaction.serialize()
+            const txid = await connection.sendRawTransaction(rawTransaction, {
+                skipPreflight: true,
+                maxRetries: 10
+            });
+            await connection.confirmTransaction({
+                blockhash: latestBlockHash.blockhash,
+                lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
+                signature: txid
+            });
 
 
-             const swapTransactionBuf = Buffer.from(swapData, 'base64');
-             var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
-             console.log("___________________________________________wallet",wallet)
-             console.log(wallet.adapter.signTransaction)
-             const signedTransaction = await wallet.adapter.signTransaction(transaction)
-             // Send the transaction
+            console.log('Transaction successful with signature:', txid);
 
-             const latestBlockHash = await connection.getLatestBlockhash();
-
-
-             console.log(latestBlockHash)
-
-             // Execute the transactionp.
-             const rawTransaction = transaction.serialize()
-             const txid = await connection.sendRawTransaction(rawTransaction, {
-               skipPreflight: true,
-               maxRetries: 2
-             });
-             await connection.confirmTransaction({
-               blockhash: latestBlockHash.blockhash,
-               lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
-               signature: txid
-             });
-             
- 
-             console.log('Transaction successful with signature:', txid);
+            return txid
         } catch (error) {
             console.error('Transaction failed:', error);
         }
     };
 
-    const handleSwap = (quote) => {
-        executeTransaction(quote.swapData);
+    const handleSwap = async (quote) => {
+        const hashes = {}
+        const tnx = await executeTransaction(quote.swapData);
+        hashes[quote.provider] = tnx; // Store the hash with the provider as the key
+
+        setTransactionHashes(hashes); // Update state with all transaction hashes
+
     };
 
     const handleConnect = async () => {
@@ -125,7 +130,7 @@ const Quotes = () => {
         <div>
             <h1>Get Quotes</h1>
             {!connected ? (
-                <button onClick={handleConnect}>Connect to Phantom Wallet</button> 
+                <button onClick={handleConnect}>Connect to Phantom Wallet</button>
             ) : (
                 <div>
                     <p>Connected: {publicKey.toString()}</p>
@@ -170,7 +175,20 @@ const Quotes = () => {
             <ul>
                 {quotes.map((quote, index) => (
                     <li key={index}>
-                        {JSON.stringify(quote)}
+                        <div>
+                            <strong>Provider:</strong> {quote.provider}
+                        </div>
+                        <div>
+                            <strong>Amount Out:</strong> {quote.quote.amountOut}
+                        </div>
+                        <div>
+                            <strong>Price Impact:</strong> {quote.quote.priceImpact}%
+                        </div>
+                        {transactionHashes && transactionHashes[quote.provider] ?// Display transaction hash if available
+                            <div>
+                                <strong>Transaction Hash:</strong> {transactionHashes[quote.provider]}
+                            </div> : <div></div>
+                        }
                         <button onClick={() => handleSwap(quote)}>Swap</button>
                     </li>
                 ))}
