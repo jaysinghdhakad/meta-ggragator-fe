@@ -38,7 +38,7 @@ const Quotes = () => {
         setQuotes(null);
         setTransactionHashes(null);
         try {
-            const response = await fetch('http://localhost:4000/getQuote', {
+            const response = await fetch('http://bsccentral.velvetdao.xyz:3000/getQuote', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
