@@ -8,7 +8,7 @@ import {
     PhantomWalletName,
     PhantomWalletAdapter
 } from '@solana/wallet-adapter-phantom';
-import { clusterApiUrl, Connection, VersionedTransaction, ComputeBudgetProgram } from '@solana/web3.js';
+import { clusterApiUrl, Connection, VersionedTransaction } from '@solana/web3.js';
 import { Buffer } from 'buffer';
 
 const Quotes = () => {
@@ -38,7 +38,7 @@ const Quotes = () => {
         setQuotes(null);
         setTransactionHashes(null);
         try {
-            const response = await fetch('http://bsccentral.velvetdao.xyz:3000/getQuote', {
+            const response = await fetch('https://bsccentral.velvetdao.xyz/getQuote', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -69,7 +69,6 @@ const Quotes = () => {
         }
 
         try {
-            const { solana } = window;
 
 
             const swapTransactionBuf = Buffer.from(swapData, 'base64');
@@ -102,12 +101,25 @@ const Quotes = () => {
     };
 
     const handleSwap = async (quote) => {
-        const hashes = {}
-        const tnx = await executeTransaction(quote.swapData);
-        hashes[quote.provider] = tnx; // Store the hash with the provider as the key
-
-        setTransactionHashes(hashes); // Update state with all transaction hashes
-
+        try {
+            setTransactionHashes(() => ({
+                [quote.provider]: "swapping",
+            }));
+            const txid = await executeTransaction(quote.swapData);
+            if (txid) {
+                setTransactionHashes((prevHashes) => ({
+                    [quote.provider]: txid,
+                }));
+            } else {
+                setTransactionHashes((prevHashes) => ({
+                    [quote.provider]: 'Transaction failed',
+                }));
+            }
+        } catch (error) {
+            setTransactionHashes((prevHashes) => ({
+                [quote.provider]: `Error: ${error.message}`,
+            }));
+        }
     };
 
     const handleConnect = async () => {
@@ -184,11 +196,16 @@ const Quotes = () => {
                         <div>
                             <strong>Price Impact:</strong> {quote.quote.priceImpact}%
                         </div>
-                        {transactionHashes && transactionHashes[quote.provider] ?// Display transaction hash if available
+                        {transactionHashes && transactionHashes[quote.provider] && (
                             <div>
-                                <strong>Transaction Hash:</strong> {transactionHashes[quote.provider]}
-                            </div> : <div></div>
-                        }
+                                <strong>Transaction Status:</strong>{' '}
+                                {transactionHashes[quote.provider].startsWith('Error')
+                                    ? <span style={{ color: 'red' }}>{transactionHashes[quote.provider]}</span>
+                                    : <a href={`https://explorer.solana.com/tx/${transactionHashes[quote.provider]}`} target="_blank" rel="noopener noreferrer">
+                                        {transactionHashes[quote.provider]}
+                                    </a>}
+                            </div>
+                        )}
                         <button onClick={() => handleSwap(quote)}>Swap</button>
                     </li>
                 ))}
