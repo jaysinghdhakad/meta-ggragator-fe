@@ -1,18 +1,27 @@
-import React, { useState } from 'react';
-import {
-    ConnectionProvider,
-    WalletProvider,
-    useWallet
-} from '@solana/wallet-adapter-react';
-import {
-    PhantomWalletName,
-    PhantomWalletAdapter
-} from '@solana/wallet-adapter-phantom';
-import { clusterApiUrl, Connection, VersionedTransaction } from '@solana/web3.js';
+import React, { useState, useEffect } from 'react';
+import { usePrivy, useLogin } from '@privy-io/react-auth';
+import { useSolanaWallets } from '@privy-io/react-auth/solana';
+import {Connection, VersionedTransaction } from '@solana/web3.js';
 import { Buffer } from 'buffer';
 
 const Quotes = () => {
     const [transactionHashes, setTransactionHashes] = useState(null);
+    const [logInn, setLogInn] = useState(false)
+    const [walletConnected, setWalletConnected] = useState(false)
+    const { wallets } = useSolanaWallets();
+
+
+    const { connectWallet, authenticated, ConnectedWallet, ready, logout } = usePrivy()
+    useEffect(() => {
+        if (ready && authenticated) {
+
+            setLogInn(true);
+        }
+    }, [ready, authenticated, setLogInn]);
+
+    const { login } = useLogin({
+        onComplete: () => setLogInn(true),
+    });
 
     const [quotes, setQuotes] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -22,9 +31,9 @@ const Quotes = () => {
         amount: '',
         tokenIn: '',
         tokenOut: '',
-        sender: ''
+        sender: '',
+        priorityFee: ''
     });
-    const { publicKey, connected, disconnect, select, wallet } = useWallet();
     const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=7ea8c2f9-658e-4675-9858-6a2a51aee843', 'confirmed');
 
     const handleChange = (e) => {
@@ -38,18 +47,19 @@ const Quotes = () => {
         setQuotes(null);
         setTransactionHashes(null);
         try {
+            console.log({ ...params })
             const response = await fetch('https://bsccentral.velvetdao.xyz/getQuote', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ ...params, sender: publicKey.toString() }),
+                body: JSON.stringify({ ...params, sender: wallets[0].address }),
             });
             if (!response.ok) {
                 throw new Error('Network response was not ok');
             }
             const data = await response.json();
-            setQuotes(data);
+            setQuotes([data]);
         } catch (error) {
             setError(error.message);
         } finally {
@@ -63,7 +73,7 @@ const Quotes = () => {
     };
 
     const executeTransaction = async (swapData) => {
-        if (!connected) {
+        if (!walletConnected) {
             alert('Please connect your wallet first.');
             return;
         }
@@ -74,7 +84,7 @@ const Quotes = () => {
             const swapTransactionBuf = Buffer.from(swapData, 'base64');
             var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
 
-            const signedTransaction = await wallet.adapter.signTransaction(transaction)
+            const signedTransaction = await wallets[0].signTransaction(transaction)
             // Send the transaction
 
             const latestBlockHash = await connection.getLatestBlockhash();
@@ -124,12 +134,31 @@ const Quotes = () => {
 
     const handleConnect = async () => {
         try {
-            await select(PhantomWalletName); // Select the Phantom wallet
+            connectWallet()
+            setWalletConnected(true)
+            console.log("__________________________________", wallets[0])
         } catch (error) {
             console.error('Connection failed:', error);
         }
     };
 
+    const handleLogin = async () => {
+        try {
+            ready && authenticated ? setLogInn(true) : setLogInn(false);
+            login(); // Call the login function
+            setLogInn(true); // Update the login state
+        } catch (error) {
+            console.error('Login failed:', error);
+        }
+    };
+    const handleDisconnect = async () => {
+        wallets[0].disconnect();
+        setLogInn(false)
+    }
+    const handleLogout = async ()=> {
+        logout();
+        setLogInn(false);
+    }
     if (loading) {
         return <div>Loading...</div>;
     }
@@ -141,14 +170,15 @@ const Quotes = () => {
     return (
         <div>
             <h1>Get Quotes</h1>
-            {!connected ? (
+            {!logInn ? <button onClick={handleLogin}>Login</button> : <button onClick={handleLogout}>Logout</button>}
+            {logInn ? !walletConnected ? (
                 <button onClick={handleConnect}>Connect to Phantom Wallet</button>
             ) : (
                 <div>
-                    <p>Connected: {publicKey.toString()}</p>
-                    <button onClick={disconnect}>Disconnect</button>
+                    <p>Connected: {wallets[0].address.toString()}</p>
+                    <button onClick={handleDisconnect}>Disconnect</button>
                 </div>
-            )}
+            ) : <div> </div>}
             <form onSubmit={handleSubmit}>
                 <input
                     type="number"
@@ -180,6 +210,14 @@ const Quotes = () => {
                     value={params.tokenOut}
                     onChange={handleChange}
                     placeholder="Token Out"
+                    required
+                />
+                <input
+                    type="number"
+                    name="priorityFee"
+                    value={params.priorityFee}
+                    onChange={handleChange}
+                    placeholder="priorityFee"
                     required
                 />
                 <button type="submit">Get Quotes</button>
@@ -216,15 +254,9 @@ const Quotes = () => {
 
 // Main App Component
 const App = () => {
-    const endpoint = clusterApiUrl('mainnet-beta'); // Change to 'mainnet-beta' for mainnet
-    const wallets = [new PhantomWalletAdapter()];
 
     return (
-        <ConnectionProvider endpoint={endpoint}>
-            <WalletProvider wallets={wallets} autoConnect>
-                <Quotes />
-            </WalletProvider>
-        </ConnectionProvider>
+        <Quotes />
     );
 };
 

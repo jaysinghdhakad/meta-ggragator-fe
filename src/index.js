@@ -3,11 +3,39 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { PrivyProvider } from '@privy-io/react-auth';
+import { toSolanaWalletConnectors } from '@privy-io/react-auth/solana';
+
+
+const solanaConnectors = toSolanaWalletConnectors({
+  // By default, shouldAutoConnect is enabled
+  shouldAutoConnect: true,
+});
+
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <App />
+    <PrivyProvider
+      appId="cm46zgxuq03vbiiynzsnzj90y"
+
+      config={{
+        // Customize Privy's appearance in your app
+        appearance: {
+          theme: 'light',
+          accentColor: '#676FFF',
+          logo: 'https://your-logo-url',
+        },
+        externalWallets: {
+          solana: {
+            connectors: solanaConnectors,
+          }
+        },
+
+        // Create embedded wallets for users who don't have a wallet
+      }}
+    > <App />
+    </PrivyProvider>
   </React.StrictMode>
 );
 
