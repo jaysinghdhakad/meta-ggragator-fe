@@ -15,7 +15,6 @@ const Quotes = () => {
 
     const {createWallet, wallets} = useSolanaWallets();
 
-
     useEffect(() => {
         if (ready && authenticated) {
 
