@@ -9,7 +9,7 @@ import { toSolanaWalletConnectors } from '@privy-io/react-auth/solana';
 
 const solanaConnectors = toSolanaWalletConnectors({
   // By default, shouldAutoConnect is enabled
-  shouldAutoConnect: true,
+  shouldAutoConnect: false,
 });
 
 
@@ -32,6 +32,7 @@ root.render(
           }
         },
 
+        createSolanaWallet: true
         // Create embedded wallets for users who don't have a wallet
       }}
     > <App />

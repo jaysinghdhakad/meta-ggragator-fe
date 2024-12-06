@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { usePrivy, useLogin } from '@privy-io/react-auth';
 import { useSolanaWallets } from '@privy-io/react-auth/solana';
-import {Connection, VersionedTransaction } from '@solana/web3.js';
+import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { Buffer } from 'buffer';
+
+
 
 const Quotes = () => {
     const [transactionHashes, setTransactionHashes] = useState(null);
     const [logInn, setLogInn] = useState(false)
-    const [walletConnected, setWalletConnected] = useState(false)
-    const { wallets } = useSolanaWallets();
 
 
-    const { connectWallet, authenticated, ConnectedWallet, ready, logout } = usePrivy()
+    const { authenticated, connectWallet, ready, logout } = usePrivy()
+
+    const {createWallet, wallets} = useSolanaWallets();
+
+
     useEffect(() => {
         if (ready && authenticated) {
 
@@ -48,7 +52,7 @@ const Quotes = () => {
         setTransactionHashes(null);
         try {
             console.log({ ...params })
-            const response = await fetch('https://bsccentral.velvetdao.xyz/getQuote', {
+            const response = await fetch('http://localhost:4000/getQuote', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -72,24 +76,17 @@ const Quotes = () => {
         fetchQuotes();
     };
 
+
+
     const executeTransaction = async (swapData) => {
-        if (!walletConnected) {
-            alert('Please connect your wallet first.');
-            return;
-        }
-
         try {
-
-
             const swapTransactionBuf = Buffer.from(swapData, 'base64');
             var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
 
             const signedTransaction = await wallets[0].signTransaction(transaction)
-            // Send the transaction
 
             const latestBlockHash = await connection.getLatestBlockhash();
 
-            // Execute the transactionp.
             const rawTransaction = signedTransaction.serialize()
             const txid = await connection.sendRawTransaction(rawTransaction, {
                 skipPreflight: true,
@@ -132,21 +129,13 @@ const Quotes = () => {
         }
     };
 
-    const handleConnect = async () => {
-        try {
-            connectWallet()
-            setWalletConnected(true)
-            console.log("__________________________________", wallets[0])
-        } catch (error) {
-            console.error('Connection failed:', error);
-        }
-    };
 
     const handleLogin = async () => {
         try {
             ready && authenticated ? setLogInn(true) : setLogInn(false);
-            login(); // Call the login function
-            setLogInn(true); // Update the login state
+            login();
+            setLogInn(true);
+            console.log(wallets[0])
         } catch (error) {
             console.error('Login failed:', error);
         }
@@ -155,7 +144,7 @@ const Quotes = () => {
         wallets[0].disconnect();
         setLogInn(false)
     }
-    const handleLogout = async ()=> {
+    const handleLogout = async () => {
         logout();
         setLogInn(false);
     }
@@ -171,12 +160,11 @@ const Quotes = () => {
         <div>
             <h1>Get Quotes</h1>
             {!logInn ? <button onClick={handleLogin}>Login</button> : <button onClick={handleLogout}>Logout</button>}
-            {logInn ? !walletConnected ? (
-                <button onClick={handleConnect}>Connect to Phantom Wallet</button>
+            {logInn ? wallets[0] == undefined? (
+                <button onClick={async() => await createWallet()}>create wallet</button>
             ) : (
                 <div>
-                    <p>Connected: {wallets[0].address.toString()}</p>
-                    <button onClick={handleDisconnect}>Disconnect</button>
+                    <p>Connected: {wallets[0].address}</p>
                 </div>
             ) : <div> </div>}
             <form onSubmit={handleSubmit}>
