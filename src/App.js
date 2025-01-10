@@ -9,12 +9,10 @@ const ERC20_ABI = [
 
 const App = () => {
   const [formData, setFormData] = useState({
-    chainId: 8453,
-    slippage: 0.1,
+    slippage: 0,
     amount: '',
     tokenIn: '',
     tokenOut: '',
-    sender: '',
     receiver: ''
   });
   const [approvalAddress,setApporvalAddress] = useState("")
@@ -86,15 +84,13 @@ const App = () => {
     clearData();
     setStatus('fetching quotes');
     try {
-      const response = await axios.post('https://metasolvertest.velvetdao.xyz/best-quotes', {
-        ...formData,
-        chainId: formData.chainId ? parseInt(formData.chainId) : '',
-        slippage: formData.slippage ? parseFloat(formData.slippage) : 0.1,
+      const response = await axios.post('https://central.velvetdao.xyz/swap', {
+        ...formData
       });
       
       // Extract quotes from the response
-      setQuotes(response.data.quotes);
-      setApporvalAddress(response.data.approvalAddress)
+      setQuotes([response.data]);
+      setApporvalAddress(response.data.to)
       setStatus('idle');
     } catch (error) {
       console.error('Error fetching quotes:', error);
@@ -167,7 +163,7 @@ const App = () => {
         to: quote.to,
         data: quote.data,
         value: ethers.BigNumber.from(quote.value),
-        gasLimit: 12000000 // Added gas limit of 12000000
+        gasLimit: 500000 // Added gas limit of 12000000
       });
       
       setStatus(`waiting-${index}`);
@@ -205,13 +201,6 @@ const App = () => {
       <form onSubmit={handleSubmit}>
         <input
           type="number"
-          name="chainId"
-          value={formData.chainId}
-          onChange={handleChange}
-          placeholder="Chain ID"
-        />
-        <input
-          type="number"
           name="slippage"
           value={formData.slippage}
           onChange={handleChange}
@@ -238,13 +227,6 @@ const App = () => {
           value={formData.tokenOut}
           onChange={handleChange}
           placeholder="Token Out Address"
-        />
-        <input
-          type="text"
-          name="sender"
-          value={formData.sender}
-          onChange={handleChange}
-          placeholder="Sender Address"
         />
         <input
           type="text"
