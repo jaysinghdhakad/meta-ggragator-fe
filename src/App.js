@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState,useEffect } from 'react';
 import { useTurnkey } from "@turnkey/sdk-react";
 import {
   GoogleOAuthProvider,
@@ -25,7 +25,27 @@ dotenv.config();
 
 const App = () => {
 
-  console.log("App");
+  useEffect(() => {
+    // Check if the WebApp is available
+    if (window.Telegram && window.Telegram.WebApp) {
+      const userData = window.Telegram.WebApp.initDataUnsafe;
+
+      // Access user data
+      const userId = userData.user.id; // User ID
+      const userFirstName = userData.user.first_name; // User's first name
+      const userLastName = userData.user.last_name; // User's last name
+      const userUsername = userData.user.username; // User's username
+      const userPhotoUrl = userData.user.photo_url; // User's profile photo URL
+
+      console.log('User Data:', {
+        userId,
+        userFirstName,
+        userLastName,
+        userUsername,
+        userPhotoUrl,
+      });
+    }
+  }, []);
 
   console.log(process.env.REACT_APP_GOOGLE_OAUTH_CLIENT_ID);
   const [email, setEmail] = useState('');
@@ -66,7 +86,8 @@ const App = () => {
 
       const keyPair = generateP256KeyPair();
       const privateKey = keyPair.privateKey;
-      const publicKey = keyPair.publicKeyUncompressed;
+      const publicKey = keyPair.publicKey;
+      console.log(keyPair)
 
       const subOrg = await turnkey.serverSign("createSubOrganization", [
         {
@@ -77,11 +98,6 @@ const App = () => {
               userName: userEmail,
               userEmail: userEmail,
               apiKeys: [
-                {
-                  apiKeyName: `Wallet Auth - ${publicKey}`,
-                  publicKey: publicKey,
-                  curveType: "API_KEY_CURVE_SECP256K1", // Adjust based on your wallet type
-                },
               ],
               oauthProviders: [
                 {
@@ -90,7 +106,7 @@ const App = () => {
                 },
               ],
               authenticators: [],
-            },
+            }
           ],
           rootQuorumThreshold: 1,
           wallet: {
@@ -99,6 +115,25 @@ const App = () => {
           }
         },
       ], "http://localhost:5000/api/create-sub-organization");
+
+
+      const delegateUserConfig = [
+        {
+          userName: `delegate user - ${userEmail}`,
+          apiKeys: [
+            {
+              apiKeyName: `Wallet Auth - ${publicKey}`,
+              publicKey: publicKey,
+              curveType: "API_KEY_CURVE_SECP256K1", // Adjust based on your wallet type
+            },
+          ],
+          authenticators: [],
+          userTags: []
+        }
+      ]
+
+      const delegateUserResponse = await turnkey.serverSign("addUserToSubOrganization", [subOrg.subOrganizationId, delegateUserConfig], "http://localhost:5000/api/create-user");
+
 
       console.log(subOrg)
     } catch (err) {
