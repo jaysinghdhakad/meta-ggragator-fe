@@ -47,6 +47,7 @@ const App = () => {
     }
   }, []);
 
+
   console.log(process.env.REACT_APP_GOOGLE_OAUTH_CLIENT_ID);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -87,7 +88,16 @@ const App = () => {
       const keyPair = generateP256KeyPair();
       const privateKey = keyPair.privateKey;
       const publicKey = keyPair.publicKey;
-      console.log(keyPair)
+      console.log({privateKey, publicKey})
+
+      const subOrgIds = await turnkey.serverSign("getSubOrgIds", [
+        {
+          filterType: "NAME",
+          filterValue: userEmail,
+        },
+      ], "http://localhost:5000/api/get-sub-org-ids");
+
+      console.log(subOrgIds)
 
       const subOrg = await turnkey.serverSign("createSubOrganization", [
         {
